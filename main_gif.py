@@ -8,9 +8,9 @@ import functional
 
 if __name__ == '__main__':
     params = {
-        'dataset_dir': 'dataset_fullTree/trial',
-        'seed': 1,
-        'model_weights': 'best_model.pt'
+        'dataset_dir': 'data/tree_dataset/trial',
+        'seed': 0,
+        'model_weights': 'model/best_model.pt'
     }
 
     np.random.seed(params['seed'])

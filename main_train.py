@@ -11,9 +11,9 @@ import functional
 if __name__ == '__main__':
     seed = 0
     params = {
-        'dataset_dir': 'dataset_fullTree/trial',
+        'dataset_dir': 'data/tree_dataset/trial',
         'seed': 0,
-        'num_epochs': 3,
+        'num_epochs': 700,
         'batch_size': 256, 
         'lr': 2e-3,
     }
@@ -84,5 +84,4 @@ if __name__ == '__main__':
     ax.plot(val_loss_history, 'b', label='validation')
     ax.legend(loc="upper right")
     plt.show()
-    functional.test(best_model, test_loader, device)
-    torch.save(best_model.state_dict(), 'model.pt')
+    torch.save(best_model.state_dict(), 'model/best_model.pt')

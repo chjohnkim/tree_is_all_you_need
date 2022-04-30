@@ -166,4 +166,4 @@ def make_gif(X, Y, X_0, edge_index, force_node, force, id):
     # Animate
     anim = animation.FuncAnimation(fig, animate, init_func=init,
                                 frames=360, interval=20, blit=True)
-    anim.save('gif/{}.gif'.format(id))
+    anim.save('output/{}.gif'.format(id))
