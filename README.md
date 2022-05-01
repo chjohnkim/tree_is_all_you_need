@@ -10,7 +10,6 @@ Paper: [TODO](arxiv_link)
 Video: [TODO](video_link)
 
 <img src="./figures/results.gif" width="480" height="360"/>
-<img src="./figures/results.gif" width="480" height="360"/>
 
 --------------------------------------
 
