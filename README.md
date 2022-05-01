@@ -9,7 +9,8 @@ Our goal for this project is to learn the complex physics model of trees. More s
 Paper: [TODO](arxiv_link)  
 Video: [TODO](video_link)
 
-![](figures/results.gif.gif)
+<img src="./figures/results.gif" width="480" height="360"/>
+<img src="./figures/results.gif" width="480" height="360"/>
 
 --------------------------------------
 
