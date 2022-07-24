@@ -1,0 +1,16 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+- family-names: "Huang"
+  given-names: "Hung-Jui"
+  orcid: "https://orcid.org/0000-0003-0184-5155"
+- family-names: "Kim"
+  given-names: "Chung Hee"
+  orcid: "https://orcid.org/0000-0001-7710-5984"
+- family-names: "Lee"
+  given-names: "Moonyoung"
+  orcid: "https://orcid.org/0000-0003-3275-5304"
+title: "tree_is_all_you_need"
+version: 1.0.0
+date-released: 2022-07-24
+url: "https://github.com/chjohnkim/tree_is_all_you_need"
