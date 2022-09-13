@@ -1,55 +1,54 @@
 import numpy as np
+import os
 import random
 import data_processing
 from torch_geometric.loader import DataLoader
 import torch
-from model import GCN
+from model import LearnedSimulator
 import functional
 
 if __name__ == '__main__':
+
     params = {
-        'dataset_dir': 'data/tree_dataset/trial',
+        'run_name': 'sim_entire_dataset',
+        'dataset_dir': ['data/10Nodes_by_tree/trial', 'data/20Nodes_by_tree/trial'],
+        'num_trees_per_dir': [27, 43],
+        'simulated_dataset': True,
         'seed': 0,
-        'model_weights': 'model/best_model.pt'
+        'train_validation_split': 0.9,
+        'visualize': True,
     }
 
+    output_dir = 'output/{}'.format(params['run_name'])
+    model_weights_path = os.path.join(output_dir, 'best_model.pt')
     np.random.seed(params['seed'])
     random.seed(params['seed'])
 
-    
     X_force_list = []
     X_pos_list = []
     Y_pos_list = []
-    for i in range(2,9):
-        d = params['dataset_dir']+str(i)
-        X_edges, X_force, X_pos, Y_pos = data_processing.load_npy(d)
-        X_force_list.append(X_force)
-        X_pos_list.append(X_pos)
-        Y_pos_list.append(Y_pos)
-    X_force_arr = np.concatenate(X_force_list)
-    X_pos_arr = np.concatenate(X_pos_list)
-    Y_pos_arr = np.concatenate(Y_pos_list)
+    test_dataset = []
+    print('Loading data from...')
+    for i_dir, dataset_dir in enumerate(params['dataset_dir']):
+        train_val_split = int(params['num_trees_per_dir'][i_dir]*params['train_validation_split'])
+        for i in range(0,params['num_trees_per_dir'][i_dir]):
+            if i<train_val_split:
+                continue
+            else:
+                d = dataset_dir+str(i)
+                print(d)
+                X_edges, X_force, X_pos, Y_pos = data_processing.load_npy(d, params['simulated_dataset'])
+                test_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                                make_directed=True, prune_augmented=False, rotate_augmented=False)
+    print('Train dataset size: {}'.format(len(test_dataset)))
 
-    X_force_arr, X_pos_arr, Y_pos_arr = data_processing.shuffle_in_unison(X_force_arr, X_pos_arr, Y_pos_arr)
-
-    train_val_split = int(len(X_force_arr)*0.9)
-
-    X_force_train = X_force_arr[:train_val_split] 
-    X_pos_train = X_pos_arr[:train_val_split] 
-    Y_pos_train = Y_pos_arr[:train_val_split] 
-
-    X_force_val = X_force_arr[train_val_split:] 
-    X_pos_val = X_pos_arr[train_val_split:] 
-    Y_pos_val = Y_pos_arr[train_val_split:] 
-
-
-    val_dataset = data_processing.make_dataset(X_edges, X_force_val, X_pos_val, Y_pos_val, 
-                    make_directed=True, prune_augmented=False, rotate_augmented=False)
-    test_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)
-
-
+    if params['visualize']:
+        batch_size = 1
+    else:
+        batch_size = 256
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = GCN().to(device)
-    model.load_state_dict(torch.load(params['model_weights']))
-    functional.test(model, test_loader, device)
+    model = LearnedSimulator().to(device)
+    model.load_state_dict(torch.load(model_weights_path))
+    functional.test(model, test_loader, device, visualize=params['visualize'])
     

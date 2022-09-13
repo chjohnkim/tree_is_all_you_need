@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import random
 import data_processing
@@ -5,19 +6,27 @@ from torch_geometric.loader import DataLoader
 import matplotlib.pyplot as plt
 import torch
 import copy
-from model import GCN
+from model import LearnedSimulator
 import functional
+from tqdm import tqdm
+
 
 if __name__ == '__main__':
     seed = 0
     params = {
-        'dataset_dir': 'data/tree_dataset/trial',
+        'run_name': 'sim_entire_dataset',
+        'dataset_dir': ['data/10Nodes_by_tree/trial', 'data/20Nodes_by_tree/trial'],
+        'num_trees_per_dir': [27, 43],
+        'simulated_dataset': True,
         'seed': 0,
         'num_epochs': 700,
-        'batch_size': 256, 
+        'batch_size': 512, 
         'lr': 2e-3,
+        'train_validation_split': 0.9,
     }
-
+    output_dir = 'output/{}'.format(params['run_name'])
+    os.makedirs(output_dir, exist_ok=True)
+       
     np.random.seed(params['seed'])
     random.seed(params['seed'])
 
@@ -25,42 +34,32 @@ if __name__ == '__main__':
     X_force_list = []
     X_pos_list = []
     Y_pos_list = []
-    for i in range(2,9):
-        d = params['dataset_dir']+str(i)
-        X_edges, X_force, X_pos, Y_pos = data_processing.load_npy(d)
-        X_force_list.append(X_force)
-        X_pos_list.append(X_pos)
-        Y_pos_list.append(Y_pos)
-    X_force_arr = np.concatenate(X_force_list)
-    X_pos_arr = np.concatenate(X_pos_list)
-    Y_pos_arr = np.concatenate(Y_pos_list)
+    train_dataset = []
+    val_dataset = []
+    for i_dir, dataset_dir in enumerate(params['dataset_dir']):
+        train_val_split = int(params['num_trees_per_dir'][i_dir]*params['train_validation_split'])
+        for i in tqdm(range(0,params['num_trees_per_dir'][i_dir])):
+            d = dataset_dir+str(i)
+            X_edges, X_force, X_pos, Y_pos = data_processing.load_npy(d, params['simulated_dataset'])
 
-    X_force_arr, X_pos_arr, Y_pos_arr = data_processing.shuffle_in_unison(X_force_arr, X_pos_arr, Y_pos_arr)
+            if i<train_val_split:
+                train_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                                make_directed=True, prune_augmented=False, rotate_augmented=False)        
+            else:
+                val_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                                make_directed=True, prune_augmented=False, rotate_augmented=False)
+        
+    print('Train dataset size: {}'.format(len(train_dataset)))
+    print('Validation dataset size: {}'.format(len(val_dataset)))
 
-    train_val_split = int(len(X_force_arr)*0.9)
-
-    X_force_train = X_force_arr[:train_val_split] 
-    X_pos_train = X_pos_arr[:train_val_split] 
-    Y_pos_train = Y_pos_arr[:train_val_split] 
-
-    X_force_val = X_force_arr[train_val_split:] 
-    X_pos_val = X_pos_arr[train_val_split:] 
-    Y_pos_val = Y_pos_arr[train_val_split:] 
-
-
-    train_dataset = data_processing.make_dataset(X_edges, X_force_train, X_pos_train, Y_pos_train, 
-                    make_directed=True, prune_augmented=True, rotate_augmented=True)
-    val_dataset = data_processing.make_dataset(X_edges, X_force_val, X_pos_val, Y_pos_val, 
-                    make_directed=True, prune_augmented=True, rotate_augmented=False)
     train_loader = DataLoader(train_dataset, batch_size=params['batch_size'], shuffle=True)
     val_loader = DataLoader(val_dataset, batch_size=params['batch_size'], shuffle=False)
-    test_loader = DataLoader(val_dataset, batch_size=1, shuffle=True)
-
+    
     fig = plt.figure()
     ax = fig.add_subplot(111)
 
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = GCN().to(device)
+    model = LearnedSimulator().to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=params['lr'])
     criterion = torch.nn.MSELoss()
@@ -69,19 +68,29 @@ if __name__ == '__main__':
     train_loss_history = []
     val_loss_history = []
     best_loss = 1e9
-    for epoch in range(1, params['num_epochs']+1):
-        train_loss = functional.train(model, optimizer, criterion, train_loader, epoch, device)
-        val_loss = functional.validate(model, criterion, val_loader, epoch, device)
-        if val_loss<best_loss:
-            best_loss=val_loss
-            best_model = copy.deepcopy(model)
-        scheduler.step(best_loss)
-        print('Epoch {} | Train Loss: {} | Val Loss: {} | LR: {}'.format(epoch, train_loss, val_loss, scheduler._last_lr))
-        train_loss_history.append(train_loss)
-        val_loss_history.append(val_loss)
-        
-    ax.plot(train_loss_history, 'r', label='train')
-    ax.plot(val_loss_history, 'b', label='validation')
-    ax.legend(loc="upper right")
-    plt.show()
-    torch.save(best_model.state_dict(), 'model/best_model.pt')
+    try:
+        for epoch in range(1, params['num_epochs']+1):
+            train_loss = functional.train(model, optimizer, criterion, train_loader, epoch, device)
+            val_loss = functional.validate(model, criterion, val_loader, epoch, device)
+            if val_loss<best_loss:
+                best_loss=val_loss
+                best_model = copy.deepcopy(model)
+                torch.save(best_model.state_dict(), os.path.join(output_dir, 'best_model.pt'))
+            scheduler.step(best_loss)
+            print('Epoch {} | Train Loss: {} | Val Loss: {} | LR: {}'.format(epoch, train_loss, val_loss, scheduler._last_lr))
+            train_loss_history.append(train_loss)
+            val_loss_history.append(val_loss)
+            with open(os.path.join(output_dir, 'trajectory.txt'), 'a') as file1:
+                file1.write('{} {} {} {}\n'.format(epoch, train_loss, val_loss, scheduler._last_lr))
+   
+        ax.plot(train_loss_history, 'r', label='train')
+        ax.plot(val_loss_history, 'b', label='validation')
+        ax.legend(loc="upper right")
+        plt.show()
+        torch.save(best_model.state_dict(), os.path.join(output_dir, 'best_model.pt'))
+    except KeyboardInterrupt:
+        ax.plot(train_loss_history, 'r', label='train')
+        ax.plot(val_loss_history, 'b', label='validation')
+        ax.legend(loc="upper right")
+        plt.show()
+        torch.save(best_model.state_dict(), os.path.join(output_dir, 'best_model.pt'))

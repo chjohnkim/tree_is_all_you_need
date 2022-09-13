@@ -87,15 +87,15 @@ def visualize_graph(X, Y, X_0, edge_index, force_node, force):
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     ax.set_zlabel('Z')
-    ax.set_xlim([-0.5, 0.5])
-    ax.set_ylim([-0.5, 0.5])
-    ax.set_zlim([0, 3])
+    ax.set_xlim([-1.0, 1.0])
+    ax.set_ylim([-1.0, 1.0])
+    ax.set_zlim([0, 2.0])
     
     custom_lines = [Line2D([0], [0], color=[0,0,1,1], lw=2),
                     Line2D([0], [0], color=[1,0,0,1], lw=4),
                     Line2D([0], [0], color=[0,1,0,1], lw=4)]
 
-    ax.legend(custom_lines, ['Input', 'GT', 'Predicted'])
+    ax.legend(custom_lines, ['Input', 'Predicted', 'GT'])
     
     
     ax = set_axes_equal(ax)

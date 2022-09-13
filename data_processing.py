@@ -249,22 +249,45 @@ def rotate_augment(X_edges, X_force, X_pos, Y_pos, rotate_augment_factor=5, stdd
     return new_X_edges, new_X_force, new_X_pos, new_Y_pos
 
 
-def load_npy(data_dir):
-    # Load npy files from dataset_dir. A shortcut to 'sample_1_push' shared folder has been added to 'My Drive' 
-    X_stiffness_damping = np.load(os.path.join(data_dir, 'X_coeff_stiff_damp.npy'))
-    X_edges = np.load(os.path.join(data_dir, 'X_edge_def.npy'))
-    X_force = np.load(os.path.join(data_dir, 'X_force_applied.npy'))
-    X_pos = np.load(os.path.join(data_dir, 'X_vertex_init_pose.npy'))
-    Y_pos = np.load(os.path.join(data_dir, 'Y_vertex_final_pos.npy'))
+def load_npy(data_dir, sim=True):
+    if sim:
+        # Load npy files from dataset_dir. A shortcut to 'sample_1_push' shared folder has been added to 'My Drive' 
+        #X_stiffness_damping = np.load(os.path.join(data_dir, 'X_coeff_stiff_damp.npy'))
+        X_edges = np.load(os.path.join(data_dir, 'X_edge_def.npy'))
+        X_force = np.load(os.path.join(data_dir, 'final_F.npy'))
+        X_pos = np.load(os.path.join(data_dir, 'final_X.npy'))
+        Y_pos = np.load(os.path.join(data_dir, 'final_Y.npy'))
+        # Truncate node orientations and tranpose to shape (num_graphs, num_nodes, n_features)
+        X_pos = X_pos[:, :7, :].transpose((0,2,1))
+        Y_pos = Y_pos[:, :7, :].transpose((0,2,1))
+        X_force = X_force.transpose((0,2,1))
+    else:
+        X_edges = np.load(os.path.join(data_dir, 'X_edge_def.npy'))
+        X_force = np.load(os.path.join(data_dir, 'final_F.npy'))
+        X_pos = np.load(os.path.join(data_dir, 'final_X.npy'), allow_pickle=True)
+        Y_pos = np.load(os.path.join(data_dir, 'final_Y.npy'), allow_pickle=True)
 
-    # Truncate node orientations and tranpose to shape (num_graphs, num_nodes, 3)
-    X_pos = X_pos[:, :7, :].transpose((0,2,1))
-    Y_pos = Y_pos[:, :7, :].transpose((0,2,1))
-    X_force = X_force.transpose((0,2,1))
+        invalid_graphs = []
+        for i, graph in enumerate(X_pos):
+            for j, node in enumerate(graph):
+                if node is None:
+                    invalid_graphs.append(i)
 
+        X_force = np.delete(X_force, invalid_graphs, axis=0)
+        X_pos = np.delete(X_pos, invalid_graphs, axis=0)
+        Y_pos = np.delete(Y_pos, invalid_graphs, axis=0)
+        
+        X_pos_list = []
+        for graph in X_pos:
+            for node in graph:
+                for feature in node:
+                    X_pos_list.append(feature)
+        X_pos = np.array(X_pos_list)
+        X_pos = X_pos.reshape(Y_pos.shape[0],Y_pos.shape[1],Y_pos.shape[2]) 
+        X_force = X_force.transpose((0,2,1))
     return X_edges, X_force, X_pos, Y_pos
 
-def make_dataset(X_edges, X_force, X_pos, Y_pos, 
+def _make_dataset(X_edges, X_force, X_pos, Y_pos, 
                  make_directed=True, prune_augmented=False, rotate_augmented=False):
     num_graphs = len(X_pos)
     X_edges, X_force, X_pos, Y_pos = make_directed_and_prune_augment(X_edges, X_force, X_pos, Y_pos,
@@ -296,3 +319,48 @@ def shuffle_in_unison(a,b,c):
     order = np.arange(len(a))
     np.random.shuffle(order)
     return a[order],b[order],c[order]
+
+def make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                 make_directed=True, prune_augmented=False, rotate_augmented=False):
+    num_graphs = len(X_pos)
+    X_edges, X_force, X_pos, Y_pos = make_directed_and_prune_augment(X_edges, X_force, X_pos, Y_pos,
+                                                                     make_directed=make_directed, 
+                                                                     prune_augmented=prune_augmented)
+    if rotate_augmented:
+        X_edges, X_force, X_pos, Y_pos = rotate_augment(X_edges, X_force, X_pos, Y_pos)
+    
+    num_graphs = len(X_pos)
+    dataset = []
+    for i in range(num_graphs): 
+        # Normalize tree by making root node [0,0,0]
+        X_pos[i][:,:3] = X_pos[i][:,:3] - X_pos[i][0,:3] 
+        Y_pos[i][:,:3] = Y_pos[i][:,:3] - Y_pos[i][0,:3] 
+
+        # node-level features: position, force
+        node_features = np.concatenate((X_pos[i][:,:3], X_force[i]), axis=1)
+        
+        # edge-level features: displacement, distance
+        edge_features = []
+        for edge in X_edges[i]:
+            displacement = X_pos[i][edge[1],:3] - X_pos[i][edge[0],:3]
+            distance = np.linalg.norm(displacement)
+            edge_features.append(np.concatenate((displacement, [distance]))) 
+        edge_features = np.asarray(edge_features)
+        # ground truth: final position
+        final_positions = Y_pos[i][:,:3]
+
+        # Combine all node features: [position, force, stiffness] with shape (num_nodes, xyz(3)+force(3)+stiffness_damping(4)) 
+        # stiffness damping is (4) because of bending stiffness/damping and torsional stiffness/damping
+        #root_feature = np.zeros((len(X_pos[i]), 1))
+        #root_feature[0, 0] = 1.0
+        #X_data = np.concatenate((X_pos[i], X_force[i], root_feature), axis=1) # TODO: Add stiffness damping features later
+        #X_data = np.concatenate((X_pos[i], X_force[i]), axis=1) # TODO: Add stiffness damping features later
+
+        edge_index = torch.tensor(X_edges[i].T, dtype=torch.long)
+        edge_attr = torch.tensor(edge_features, dtype=torch.float) 
+        x = torch.tensor(node_features, dtype=torch.float)
+        y = torch.tensor(final_positions, dtype=torch.float)
+        #force_node = np.argwhere(np.sum(np.abs(X_force[i]), axis=1))[0,0]
+        graph_instance = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr)
+        dataset.append(graph_instance)
+    return dataset
