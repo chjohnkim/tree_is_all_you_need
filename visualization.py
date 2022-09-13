@@ -8,6 +8,27 @@ from mpl_toolkits.mplot3d.art3d import Line3DCollection
 from mpl_toolkits.mplot3d import Axes3D
 
 
+def print_loss_by_tree(base, val):
+    """
+    generates a scatter plot with base displacement and prediction error as its dimenstion. Each point is one push prediction
+    """
+    zipped = list(zip(base, val))
+    zipped.sort(key=first_value) 
+
+    base = [x for (x,y) in zipped]
+    val = [y for (x,y) in zipped]
+    
+    fig = plt.figure()
+    ax = fig.add_subplot(111)
+    ax.scatter(base, val, s=4)
+    ax.plot(base, base, color="orange")
+    ax.set_xlabel("base loss")
+    ax.set_ylabel("validation loss")
+    #display(fig)
+    plt.savefig(results_path+"base_vs_loss_by_tree")
+    plt.close()
+    clear_output(wait=True)
+
 class Arrow3D(FancyArrowPatch):
     def __init__(self, xs, ys, zs, *args, **kwargs):
         super().__init__((0,0), (0,0), *args, **kwargs)
