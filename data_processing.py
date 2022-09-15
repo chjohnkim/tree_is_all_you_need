@@ -7,6 +7,71 @@ from scipy.spatial.transform import Rotation
 import torch
 from torch_geometric.data import Data
 
+def remove_duplicate_nodes(edges, init_positions, final_positions, X_force):
+    tree_representative = init_positions[0]
+    tree_representative = np.around(tree_representative, decimals=4)
+    duplicates = [(0,1)] #treat 0 and 1 as duplicates, as 0 represents the base_link aka the floor, which should behave like the root
+    for i, node in enumerate(tree_representative):
+        for j, nodec in enumerate(tree_representative):
+            if (node[:3] == nodec[:3]).all() and i != j and has_same_parent(i,j,edges):
+                if i < j:
+                    duplicates.append((i,j))
+                else:
+                    duplicates.append((j,i))
+    duplicates = list(set(duplicates))
+    while len(duplicates) > 0:
+        original, duplicate = duplicates.pop()
+        edges, init_positions, final_positions, duplicates, X_force = remove_duplicate(original, duplicate, edges, init_positions, final_positions, duplicates, X_force)
+        duplicates = list(set(duplicates))
+        duplicates = adjust_indexing(duplicates, duplicate)
+        edges = adjust_indexing(edges, duplicate)
+    edges = np.array(edges)
+    return edges, init_positions[:,:,:3], final_positions[:,:,:3], X_force
+
+def has_same_parent(i,j,edges):
+    for parent, child in edges:
+        if child == i:
+            parent_i = parent
+        if child == j:
+            parent_j = parent
+    return parent_i == parent_j
+
+def remove_duplicate(original, duplicate, edge_def, init_positions, final_positions, duplicates, forces):
+    init_positions = np.delete(init_positions, duplicate, axis=1)
+    final_positions = np.delete(final_positions, duplicate, axis=1)
+
+    new_edge_def = []
+    new_duplicates = []
+    for orig, dup in duplicates:
+        if orig == duplicate:
+            new_duplicates.append((original,dup))
+        elif duplicate != dup and duplicate != orig:
+            new_duplicates.append((orig,dup))
+
+    for parent, child in edge_def:
+        if duplicate == parent:
+            new_edge_def.append((original,child))
+        elif duplicate != parent and duplicate != child:
+            new_edge_def.append((parent,child))
+
+    for idx, force in enumerate(forces):
+        if np.linalg.norm(force[duplicate]) != 0:
+            forces[idx][original] += forces[idx][duplicate]
+    
+    forces = np.delete(forces, duplicate, axis=1)
+
+    return new_edge_def, init_positions, final_positions, new_duplicates, forces
+
+def adjust_indexing(tuple_list, deleted_index):
+    new_tuple_list = []
+    for i, j in tuple_list:
+        if i > deleted_index:
+            i = i-1
+        if j > deleted_index:
+            j = j-1
+        new_tuple_list.append((i,j))
+    return new_tuple_list
+
 def get_topological_order(neighbor_dict, root=0):
     """
     Find the topological order of the tree.
@@ -320,7 +385,7 @@ def shuffle_in_unison(a,b,c):
     np.random.shuffle(order)
     return a[order],b[order],c[order]
 
-def make_dataset(X_edges, X_force, X_pos, Y_pos, 
+def make_dataset(X_edges, X_force, X_pos, Y_pos, tree_pts,
                  make_directed=True, prune_augmented=False, rotate_augmented=False):
     num_graphs = len(X_pos)
     X_edges, X_force, X_pos, Y_pos = make_directed_and_prune_augment(X_edges, X_force, X_pos, Y_pos,
@@ -361,6 +426,6 @@ def make_dataset(X_edges, X_force, X_pos, Y_pos,
         x = torch.tensor(node_features, dtype=torch.float)
         y = torch.tensor(final_positions, dtype=torch.float)
         #force_node = np.argwhere(np.sum(np.abs(X_force[i]), axis=1))[0,0]
-        graph_instance = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr)
+        graph_instance = Data(x=x, edge_index=edge_index, y=y, edge_attr=edge_attr, tree_pts=tree_pts)
         dataset.append(graph_instance)
     return dataset

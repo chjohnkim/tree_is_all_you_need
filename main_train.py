@@ -23,6 +23,7 @@ if __name__ == '__main__':
         'batch_size': 512, 
         'lr': 2e-3,
         'train_validation_split': 0.9,
+        'remove_duplicates': True
     }
     output_dir = 'output/{}'.format(params['run_name'])
     os.makedirs(output_dir, exist_ok=True)
@@ -41,12 +42,14 @@ if __name__ == '__main__':
         for i in tqdm(range(0,params['num_trees_per_dir'][i_dir])):
             d = dataset_dir+str(i)
             X_edges, X_force, X_pos, Y_pos = data_processing.load_npy(d, params['simulated_dataset'])
+            if params['remove_duplicates']:
+                X_edges, X_force, X_pos, Y_pos = data_processing.remove_duplicate_nodes(X_edges, X_pos, Y_pos, X_force)
 
             if i<train_val_split:
-                train_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                train_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, i_dir,
                                 make_directed=True, prune_augmented=False, rotate_augmented=False)        
             else:
-                val_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, 
+                val_dataset += data_processing.make_dataset(X_edges, X_force, X_pos, Y_pos, i_dir,
                                 make_directed=True, prune_augmented=False, rotate_augmented=False)
         
     print('Train dataset size: {}'.format(len(train_dataset)))
